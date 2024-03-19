@@ -27,13 +27,12 @@ fn find_cases_by_digest_regex(
     let mut results: Vec<HashCase> = Vec::new(); 
     for i in inputs {
         let digest = sha256::digest(i.to_string());
-        if !needed_digest.is_match(digest.as_str()) {
-            continue;
+        if needed_digest.is_match(digest.as_str()) {
+            results.push(HashCase {
+                input: i,
+                digest: digest,
+            });
         }
-        results.push(HashCase {
-            input: i,
-            digest: digest,
-        });
     }
     return results;
 }
@@ -86,13 +85,9 @@ impl Iterator for ChunksBoundsIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.next_chunk_start;
-        let next_start_or_overflow = start.checked_add(self.chunk_size);
-        if next_start_or_overflow.is_none() {
-            return None;
-        }
-        let next_start = next_start_or_overflow.unwrap(); 
-        self.next_chunk_start = next_start;
-        return Some(start..next_start);
+        return start.checked_add(self.chunk_size)
+            .map(|next_start| start..next_start)
+            .inspect(|range| {self.next_chunk_start = range.end});
     }
 }
 
@@ -101,48 +96,36 @@ fn main() {
     let args = Args::parse();
     let pool = ThreadPool::new(args.threads);
     let (sender, receiver) = mpsc::channel::<Vec<HashCase>>();
-
+    
     let regex = has_exatly_n_trailing_zeros(args.trailing_zeros);
     let mut task_inputs = ChunksBoundsIterator::new(args.chunk_size, 1)
         .map(|range| TaskChunkInput::new(range, &regex));
     
-    for _ in 0..pool.max_count() {
+    for _ in 0..args.threads {
         let task = task_inputs.next().unwrap();
         schedule_task_chunk(&pool, &sender, task);    
     }
-    
+
     let mut found = 0;
     let mut results: Vec<HashCase> = Vec::with_capacity(args.hashes_needed);
-
     while let Ok(received) = receiver.recv() {
-        for case in received {
-            results.push(case);
-            found += 1;
-        }
+        found += received.len();
+        results.extend(received.into_iter());
 
         if found >= args.hashes_needed {
             break;
         }
-        let input = task_inputs.next();
-        if input.is_none() {
-            break;
+        match task_inputs.next() {
+            None => break,
+            Some(input) => schedule_task_chunk(&pool, &sender, input),
         }
-        schedule_task_chunk(&pool, &sender, input.unwrap())
     }
-
     drop(sender);
-    pool.join();
-
-    while let Ok(received) = receiver.recv() {
-        for case in received {
-            results.push(case);
-            found += 1;
-        }
+    for received in receiver.iter() {
+        results.extend(received.into_iter());
     }
-
 
     results.sort_unstable_by_key(|x| x.input);
-
     for r in results.iter().take(args.hashes_needed) {
         println!("{}, {}", r.input, r.digest);
     }
