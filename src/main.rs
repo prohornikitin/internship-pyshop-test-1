@@ -1,6 +1,6 @@
 mod args;
 
-use std::{ops::Range, thread::{self, JoinHandle}};
+use std::{collections::VecDeque, ops::Range, thread::{self, JoinHandle}};
 
 use args::Args;
 use clap::Parser;
@@ -43,30 +43,29 @@ fn main() {
     let mut new_chunk_start = 1;
     let mut found = 0;
     let regex = has_exatly_n_trailing_zeros(args.trailing_zeros);
-    while new_chunk_start < usize::MAX && found < args.hashes_needed  {
-        let mut handles: Vec<JoinHandle<Vec<HashCase>>> = vec![];
-        for _ in 0..args.threads {
-            handles.push(spawn_worker_thread(
-                new_chunk_start..new_chunk_start + args.chunk_size,
-                regex.clone()
-            ));
-            new_chunk_start += args.chunk_size;
-        }
 
-        let mut results: Vec<HashCase> = vec![];
-        for h in handles {
-            for v in h.join().unwrap() {
-                results.push(v);
-            }
-        }
-        results.sort_unstable_by_key(|x| x.input);
-        for v in results {
+    let mut handles: VecDeque<JoinHandle<Vec<HashCase>>> = VecDeque::with_capacity(args.threads+1);
+    
+    for _ in 0..args.threads {
+        handles.push_back(spawn_worker_thread(
+            new_chunk_start..new_chunk_start + args.chunk_size,
+            regex.clone()
+        ));
+        new_chunk_start += args.chunk_size;
+    }
+
+    while let Some(h) = handles.pop_front() {
+        for v in h.join().unwrap() {
             println!("{}, {}", v.input, v.digest);
             found += 1;
             if found >= args.hashes_needed {
                 return;
             }
         }
-    }
-    
+        handles.push_back(spawn_worker_thread(
+            new_chunk_start..new_chunk_start + args.chunk_size,
+            regex.clone()
+        ));
+        new_chunk_start += args.chunk_size;
+    }    
 }
