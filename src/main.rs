@@ -2,13 +2,12 @@ mod args;
 use std::{ops::Range, sync::mpsc::{self, Sender}};
 
 use args::Args;
-use clap::Parser;
 use regex::Regex;
 use sha256;
 use threadpool::ThreadPool;
 
 
-fn has_exatly_n_trailing_zeros(n: usize) -> Regex {
+fn has_n_trailing_zeros(n: u8) -> Regex {
     Regex::new(format!(r"0{{{}}}$", n).as_str()).unwrap()
 }
 
@@ -97,7 +96,7 @@ fn main() {
     let pool = ThreadPool::new(args.threads);
     let (sender, receiver) = mpsc::channel::<Vec<HashCase>>();
     
-    let regex = has_exatly_n_trailing_zeros(args.trailing_zeros);
+    let regex = has_n_trailing_zeros(args.trailing_zeros);
     let mut task_inputs = ChunksBoundsIterator::new(args.chunk_size, 1)
         .map(|range| TaskChunkInput::new(range, &regex));
     
