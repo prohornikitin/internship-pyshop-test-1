@@ -3,13 +3,12 @@ mod args;
 use std::{collections::VecDeque, ops::Range, thread::{self, JoinHandle}};
 
 use args::Args;
-use clap::Parser;
 use regex::Regex;
 use sha256;
 
 
 
-fn has_exatly_n_trailing_zeros(n: usize) -> Regex {
+fn has_n_trailing_zeros(n: u8) -> Regex {
     Regex::new(format!(r"0{{{}}}$", n).as_str()).unwrap()
 }
 
@@ -42,7 +41,7 @@ fn main() {
 
     let mut new_chunk_start = 1;
     let mut found = 0;
-    let regex = has_exatly_n_trailing_zeros(args.trailing_zeros);
+    let regex = has_n_trailing_zeros(args.trailing_zeros);
 
     let mut handles: VecDeque<JoinHandle<Vec<HashCase>>> = VecDeque::with_capacity(args.threads+1);
     
