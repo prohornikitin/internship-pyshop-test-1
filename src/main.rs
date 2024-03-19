@@ -1,21 +1,11 @@
+mod args;
 use std::{ops::Range, sync::mpsc::{self, Sender}};
 
+use args::Args;
+use clap::Parser;
 use regex::Regex;
 use sha256;
-use clap::Parser;
 use threadpool::ThreadPool;
-
-#[derive(Parser, Debug)]
-// #[command(0.1, Command, long_about = None)]
-struct Args {
-    /// Name of the person to greet
-    #[arg(short='N', default_value="1", help="number of trailing zeros which hash should have")]
-    trailing_zeros: usize,
-
-    /// Number of times to greet
-    #[arg(short='F', default_value="1", help="number of hashes to generated")]
-    hashes_needed: usize,
-}
 
 
 fn has_exatly_n_trailing_zeros(n: usize) -> Regex {
@@ -107,14 +97,13 @@ impl Iterator for ChunksBoundsIterator {
 }
 
 
-const CHUNK_SIZE: usize = 1024;
 fn main() {
     let args = Args::parse();
-    let pool = ThreadPool::new(4);
+    let pool = ThreadPool::new(args.threads);
     let (sender, receiver) = mpsc::channel::<Vec<HashCase>>();
 
     let regex = has_exatly_n_trailing_zeros(args.trailing_zeros);
-    let mut task_inputs = ChunksBoundsIterator::new(CHUNK_SIZE, 1)
+    let mut task_inputs = ChunksBoundsIterator::new(args.chunk_size, 1)
         .map(|range| TaskChunkInput::new(range, &regex));
     
     for _ in 0..pool.max_count() {
